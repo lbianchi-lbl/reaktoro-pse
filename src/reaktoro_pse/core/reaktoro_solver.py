@@ -87,6 +87,7 @@ class ReaktoroSolver:
         self._sequential_fails = 0
         self._max_fails = 30
         self._input_params = {}
+        self.jacobian_scaling_values = None
 
     def export_config(self):
         export_object = ReaktoroSolverExport()
@@ -259,3 +260,6 @@ class ReaktoroSolver:
         )
         self.output_specs.update_supported_props()
         return result
+
+    def get_jacobian_scaling(self):
+        return self.jacobian_scaling_values
