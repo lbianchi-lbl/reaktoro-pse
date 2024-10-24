@@ -69,7 +69,7 @@ class AggregateSolverState:
         self.output_windows = {}
         self.parallel_mode = parallel_mode
         if maximum_number_of_parallel_solves is None:
-            maximum_number_of_parallel_solves = multiprocessing.cpu_count()
+            maximum_number_of_parallel_solves = multiprocessing.cpu_count() - 1
         self.maximum_number_of_parallel_solves = maximum_number_of_parallel_solves
 
     def register_solve_function(self, block_index, solver_function):
