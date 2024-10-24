@@ -141,6 +141,8 @@ def test_build_with_rkt_dissolution(build_with_dissolve_in_rkt):
     m.rkt_block = Block()
     builder = ReaktoroBlockBuilder(m.rkt_block, rkt_solver)
     builder.initialize()
+    m.display()
+    m.rkt_block.reaktoro_model.display()
     # will have as many DOFs as outputs due to pyomo not
     # knowing tha graybox exists.
     assert len(m.rkt_block.reaktoro_model.inputs) == len(
@@ -154,7 +156,7 @@ def test_build_with_rkt_dissolution(build_with_dissolve_in_rkt):
     cy_solver = get_solver(solver="cyipopt-watertap")
     cy_solver.options["max_iter"] = 20
     m.pH.unfix()
-    m.rkt_block.outputs[("scalingTendency", "Calcite")].fix(5)
+    # m.rkt_block.outputs[("scalingTendency", "Calcite")].fix(5)
     result = cy_solver.solve(m, tee=True)
     assert_optimal_termination(result)
     assert pytest.approx(m.pH.value, 1e-3) == 6.5257440
@@ -172,6 +174,7 @@ def test_build_with_pyomo_dissolution(build_with_dissolve_in_pyomo):
     builder.initialize()
     # will have as many DOFs as outputs due to pyomo not
     # knowing tha graybox exists.
+    print(rkt_solver.output_specs.rkt_outputs)
     assert degrees_of_freedom(m) == len(rkt_solver.output_specs.rkt_outputs)
     cy_solver = get_solver(solver="cyipopt-watertap")
     cy_solver.options["max_iter"] = 20

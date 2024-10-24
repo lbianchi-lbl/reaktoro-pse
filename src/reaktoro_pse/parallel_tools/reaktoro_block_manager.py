@@ -9,18 +9,22 @@
 # information, respectively. These files are also available online at the URL
 # "https://github.com/watertap-org/reaktoro-pse/"
 #################################################################################
-import multiprocessing as mp
 
 from matplotlib.pyplot import sca
 from pytest import param
 from reaktoro_pse.core.reaktoro_gray_box import (
     ReaktoroGrayBox,
 )
+from reaktoro_pse.parallel_tools.parallel_manager import ReaktoroParallelManager
+
+from reaktoro_pse.core.reaktoro_gray_box import HessTypes
+
 from pyomo.contrib.pynumero.interfaces.external_grey_box import (
     ExternalGreyBoxBlock,
 )
 import numpy as np
 from idaes.core.base.process_base import declare_process_block_class, ProcessBlockData
+from pyomo.common.config import ConfigValue, IsInstance, ConfigDict
 
 
 class ReaktoroBlockData:
@@ -32,6 +36,15 @@ class ReaktoroBlockData:
         self.jacobian = None
         self.builder = None
         self.pseudo_gray_box = None
+
+    def get_configs(self):
+        configs = []
+        configs.append(self.state.export_config())
+        configs.append(self.inputs.export_config())
+        configs.append(self.outputs.export_config())
+        configs.append(self.jacobian.export_config())
+        configs.append(self.solver.export_config())
+        return configs
 
 
 class AggregateSolverState:
@@ -45,6 +58,7 @@ class AggregateSolverState:
         self.output_blk_indexes = []
         self.jacobian_scaling_obj = []
         self.solver_functions = {}
+        self.get_solution_function = {}
         self.output_matrix = []
         self.jacobian_matrix = []
         self.input_windows = {}
@@ -52,6 +66,9 @@ class AggregateSolverState:
 
     def register_solve_function(self, block_index, solver_function):
         self.solver_functions[block_index] = solver_function
+
+    def register_get_function(self, block_index, get_function):
+        self.get_solution_function[block_index] = get_function
 
     def register_input(self, block_index, input_key, input_obj):
         self.inputs.append((block_index, input_key))
@@ -107,13 +124,11 @@ class AggregateSolverState:
         for (idx, key), item in params.items():
             if block_idx == idx:
                 param_set[key] = item
-        print(param_set)
         return param_set  # np.array(params)[
         #     self.input_windows[block_idx][0] : self.input_windows[block_idx][1]
         # ]
 
     def update_solution(self, block_idx, output, jacobian):
-        print(self.input_windows[block_idx][0], self.input_windows[block_idx][1])
         self.output_matrix[
             self.output_windows[block_idx][0] : self.output_windows[block_idx][1]
         ] = output
@@ -123,10 +138,20 @@ class AggregateSolverState:
         ] = jacobian
 
     def solve_reaktoro_block(self, params):
+        results = []
         for blk in self.registered_blocks:
             param_set = self.get_params(blk, params)
-            jacobian, output = self.solver_functions[blk](param_set)
+            result = self.solver_functions[blk](param_set)
+            results.append(result)
+
+        for i, blk in enumerate(self.registered_blocks):
+            if results[i] is None:
+                jacobian, output = self.get_solution_function[blk]()
+            else:
+                jacobian, output = results[i]
+
             self.update_solution(blk, output, jacobian)
+
         return (
             self.jacobian_matrix,
             self.output_matrix,
@@ -149,10 +174,33 @@ class PseudoGrayBox:
 
 @declare_process_block_class("ReaktoroBlockManager")
 class ReaktoroBlockManagerData(ProcessBlockData):
+    CONFIG = ProcessBlockData.CONFIG()
+    CONFIG.declare(
+        "hessian_type",
+        ConfigValue(
+            default="BFGS",
+            domain=IsInstance((str, HessTypes)),
+            description="Hessian type to use for reaktor gray box",
+            doc="""Hessian type to use, some might provide better stability
+                options (Jt.J, BFGS, BFGS-mod, BFGS-damp, BFGS-ipopt""",
+        ),
+    )
+    CONFIG.declare(
+        "use_parallel_mode",
+        ConfigValue(
+            default=True,
+            domain=bool,
+            description="Enables use of parallel workers",
+            doc="""If true, will parallelize all rekatoro solver calls using multiprocessing""",
+        ),
+    )
+
     def build(self):
         super().build()
         self.registered_blocks = []
         self.aggregate_solver_state = AggregateSolverState()
+        if self.config.use_parallel_mode:
+            self.parallel_manager = ReaktoroParallelManager()
 
     def register_block(self, state, inputs, outputs, jacobian, solver, builder):
         blk = ReaktoroBlockData()
@@ -168,13 +216,28 @@ class ReaktoroBlockManagerData(ProcessBlockData):
 
     def aggregate_inputs_and_outputs(self):
         for block_idx, block in enumerate(self.registered_blocks):
+            if self.config.use_parallel_mode:
+                self.parallel_manager.register_block(block_idx, block)
             for key, obj in block.inputs.rkt_inputs.items():
                 self.aggregate_solver_state.register_input(block_idx, key, obj)
             for output in block.outputs.rkt_outputs.keys():
                 self.aggregate_solver_state.register_output(block_idx, output)
-            self.aggregate_solver_state.register_solve_function(
-                block_idx, block.solver.solve_reaktoro_block
-            )
+            if self.config.use_parallel_mode:
+                solve_func, get_func = self.parallel_manager.get_solve_and_get_function(
+                    block_idx
+                )
+                self.aggregate_solver_state.register_solve_function(
+                    block_idx, solve_func
+                )
+                self.aggregate_solver_state.register_get_function(block_idx, get_func)
+            else:
+                self.aggregate_solver_state.register_solve_function(
+                    block_idx, block.solver.solve_reaktoro_block
+                )
+        # assert False
+        if self.config.use_parallel_mode:
+            self.parallel_manager.start_workers()
+        # assert False
 
     def build_reaktoro_blocks(self):
         self.aggregate_inputs_and_outputs()
@@ -184,7 +247,7 @@ class ReaktoroBlockManagerData(ProcessBlockData):
             inputs=self.aggregate_solver_state.inputs,
             input_dict=self.aggregate_solver_state.input_dict,
             outputs=self.aggregate_solver_state.outputs,
-            hessian_type="BGFS",  # TODO make it a config option
+            hessian_type=self.config.hessian_type,
         )
         self.reaktoro_model = ExternalGreyBoxBlock(external_model=external_model)
         for block_idx, block in enumerate(self.registered_blocks):
@@ -199,10 +262,16 @@ class ReaktoroBlockManagerData(ProcessBlockData):
                 block.outputs.rkt_outputs.keys(),
                 block_idx,
             )
+            if self.config.use_parallel_mode:
+                init_func = self.parallel_manager.get_initialize_function(block_idx)
+            else:
+                init_func = self.aggregate_solver_state.solver_functions[block_idx]
             block.builder.build_reaktoro_block(
                 gray_box_model=pseudo_gray_box_model,
-                reaktoro_initialize_function=self.aggregate_solver_state.solver_functions[
-                    block_idx
-                ],
+                reaktoro_initialize_function=init_func,
             )
             block.pseudo_gray_box = pseudo_gray_box_model
+
+    def terminate_workers(self):
+        if self.config.use_parallel_mode:
+            self.parallel_manager.terminate_workers()

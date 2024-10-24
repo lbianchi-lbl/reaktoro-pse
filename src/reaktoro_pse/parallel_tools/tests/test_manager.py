@@ -117,3 +117,4 @@ def test_blockBuild_with_speciation_block(build_rkt_state_with_species):
     assert "property_block" in scaling_result
     for key in scaling_result["property_block"]:
         assert scaling_result["property_block"][key] == 1
+    m.reaktoro_manager.terminate_workers()

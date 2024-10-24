@@ -55,9 +55,9 @@ class ReaktoroBlockBuilder:
             raise TypeError("Reaktoro block builder requires a ReaktoroSolver class")
         self.configure_jacobian_scaling()
         self.reaktoro_initialize_function = None  # used to provide external solve call
+        self.build_output_vars()
         if build_on_init:  # option to support legacy implementation
             self.build_reaktoro_block()
-        self.build_output_vars()
 
     def build_reaktoro_block(
         self, gray_box_model=None, reaktoro_initialize_function=None
@@ -71,7 +71,7 @@ class ReaktoroBlockBuilder:
             )
         else:
             self.block.reaktoro_model = gray_box_model
-        if reaktoro_initialize_function is None:
+        if reaktoro_initialize_function is not None:
             self.reaktoro_initialize_function = reaktoro_initialize_function
         self.build_input_constraints()
         self.build_output_constraints()
@@ -187,8 +187,8 @@ class ReaktoroBlockBuilder:
         The is will also check if user provided an output pyomo var and if not will
         add them to new_output_var dict, which will be used to create new output variables on the block
         """
-        new_output_vars = {}
         for key, obj in self.solver.output_specs.user_outputs.items():
+
             if PropTypes.pyomo_built_prop == obj.property_type:
                 for (
                     pyoPropKey,
@@ -213,13 +213,14 @@ class ReaktoroBlockBuilder:
 
     def initialize(self, presolve_during_initialization=False):
         self.initialize_input_variables_and_constraints()
+
         if self.reaktoro_initialize_function is None:
             self.solver.state.equilibrate_state()
             self.solver.solve_reaktoro_block(presolve=presolve_during_initialization)
         else:
             self.reaktoro_initialize_function(presolve=presolve_during_initialization)
         self.initialize_output_variables_and_constraints()
-        _log.info(f"Initialized rkt block")
+        _log.info(f"Initialized rkt block. {self.reaktoro_initialize_function}")
 
     def get_sf(self, pyo_var):
 

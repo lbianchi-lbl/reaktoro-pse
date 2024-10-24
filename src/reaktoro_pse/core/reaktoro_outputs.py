@@ -89,6 +89,9 @@ class RktOutput:
     def set_poyomo_build_option(self, func):
         self.pyomo_build_options = func
 
+    def set_value(self, value):
+        self.pyomo_var.set_value(value)
+
     def set_get_function(self, func):
         self.get_function = func
 
