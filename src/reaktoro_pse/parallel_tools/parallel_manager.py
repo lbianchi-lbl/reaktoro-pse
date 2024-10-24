@@ -76,6 +76,7 @@ class RemoteWorker:
             dtype=np.float64,
             buffer=self.input_reference.buf,
         )
+        self.old_matrix = None  # np.zeros(len(self.inputs.rkt_inputs.keys()))
         self.jacobian_matrix = np.ndarray(
             (
                 len(self.outputs.rkt_outputs.keys()),
@@ -91,6 +92,7 @@ class RemoteWorker:
             buffer=self.output_reference.buf,
         )
         self.params = {}
+        self.old_params = {}
 
     def initialize(self, presolve=False):
         _log.info("Initialized in remote worker")
@@ -101,13 +103,16 @@ class RemoteWorker:
         self.update_output_matrix(outputs, jacobian)
 
     def solve(self):
-        self.get_params()
         try:
-            jacobian, outputs = self.solver.solve_reaktoro_block(self.params)
-            self.update_output_matrix(outputs, jacobian)
+            if self.check_solve():
+                self.get_params()
+                jacobian, outputs = self.solver.solve_reaktoro_block(self.params)
+                self.update_output_matrix(outputs, jacobian)
             return WorkerMessages.success
         except cyipopt.CyIpoptEvaluationError:
             return WorkerMessages.CyIpoptEvaluationError
+        except RuntimeError:
+            return WorkerMessages.failed
 
     def update_output_matrix(self, outputs, jacobian):
         np.copyto(self.output_matrix, outputs)
@@ -117,10 +122,33 @@ class RemoteWorker:
         for i, key in enumerate(self.inputs.rkt_inputs.keys()):
             self.params[key] = self.input_matrix[2][i]
 
+    def check_solve(self):
+        if self.old_matrix is None:
+            self.old_matrix = self.input_matrix[2].copy()
+            return True
+        else:
+            if any(
+                self.old_matrix[i] != self.input_matrix[2][i]
+                for i in range(self.input_matrix[2].size)
+            ):
+                self.old_matrix = self.input_matrix[2].copy()
+                return True
+            else:
+                return False
+
     def update_inputs(self):
         for i, key in enumerate(self.inputs.rkt_inputs.keys()):
             self.inputs.rkt_inputs[key].value = self.input_matrix[0][i]
             self.inputs.rkt_inputs[key].converted_value = self.input_matrix[1][i]
+
+    def close_shared_memory(self):
+        # clean up memory on termination
+        self.input_reference.close()
+        self.input_reference.unlink()
+        self.output_reference.close()
+        self.output_reference.unlink()
+        self.jacobian_reference.close()
+        self.jacobian_reference.unlink()
 
 
 class WorkerMessages:
@@ -131,6 +159,7 @@ class WorkerMessages:
     failed_solve = "failed_solve"
     CyIpoptEvaluationError = "CyIpoptEvaluationError"
     terminate = "terminate"
+    failed = "failed"
 
 
 class LocalWorker:
@@ -227,16 +256,20 @@ class LocalWorker:
             elif result == WorkerMessages.CyIpoptEvaluationError:
                 raise cyipopt.CyIpoptEvaluationError
             else:
-                raise ValueError("The worker failed and did not return a solution")
+                raise RuntimeError(
+                    "The worker failed and did not return a solution terminated"
+                )
 
     def terminate(self):
         self.local_pipe.send(WorkerMessages.terminate)
+        _log.info("Worker terminated")
 
 
 class ReaktoroParallelManager:
-    def __init__(self):
+    def __init__(self, time_out):
         self.registered_workers = {}
         self.processes = {}
+        self.time_out = time_out
 
     def register_block(self, block_idx, block_data):
         self.registered_workers[block_idx] = LocalWorker(block_data)
@@ -260,6 +293,7 @@ class ReaktoroParallelManager:
                     local_worker.input_reference.name,
                     local_worker.output_reference.name,
                     local_worker.jacobian_reference.name,
+                    self.time_out,
                 ),
             )
             process.start()
@@ -273,15 +307,12 @@ class ReaktoroParallelManager:
 
 
 def ReaktoroActor(
-    pipe, reaktoro_block_data, input_matrix, output_matrix, jacobian_matrix
+    pipe, reaktoro_block_data, input_matrix, output_matrix, jacobian_matrix, time_out=20
 ):
     reaktoro_worker = RemoteWorker(
         reaktoro_block_data, input_matrix, output_matrix, jacobian_matrix
     )
     dog_watch = time.time()
-    max_time = (
-        300  # five min time out should be enough for waiting, this will kill worker
-    )
     while True:
         if pipe.poll():
             msg = pipe.recv()
@@ -298,12 +329,19 @@ def ReaktoroActor(
                 reaktoro_worker.initialize(presolve=option)
                 result = WorkerMessages.success
             if command == WorkerMessages.solve:
-                reaktoro_worker.solve()
-                result = WorkerMessages.success
+                result = reaktoro_worker.solve()
             if command == WorkerMessages.terminate:
+                reaktoro_worker.close_shared_memory()
                 return
             pipe.send(result)
             dog_watch = time.time()
-        if abs(time.time() - dog_watch) > max_time:
+        if abs(time.time() - dog_watch) > time_out:
+            # make sure we kill worker if it does not receive command with in time out
+            # this is to handle scenario where main flowsheet crashes or is rebuilt
+            _log.warning(
+                f"""Worker timed out, shutting down worker.
+                    The time out was set to {time_out}, increase it if necessary in ReaktoroBlockManager options"""
+            )
+            reaktoro_worker.close_shared_memory()
             return
-        time.sleep(1e-3)  # 1ms sleep time to reduce load
+        time.sleep(1e-3)  # 1ms sleep time to reduce load when idle

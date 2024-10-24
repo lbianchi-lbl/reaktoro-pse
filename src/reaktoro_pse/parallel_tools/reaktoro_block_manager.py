@@ -10,6 +10,7 @@
 # "https://github.com/watertap-org/reaktoro-pse/"
 #################################################################################
 
+import multiprocessing
 from matplotlib.pyplot import sca
 from pytest import param
 from reaktoro_pse.core.reaktoro_gray_box import (
@@ -51,7 +52,7 @@ class ReaktoroBlockData:
 
 
 class AggregateSolverState:
-    def __init__(self):
+    def __init__(self, parallel_mode=True, maximum_number_of_parallel_solves=None):
         self.hessian_type = None
         self.inputs = []
         self.input_dict = {}
@@ -66,6 +67,10 @@ class AggregateSolverState:
         self.jacobian_matrix = []
         self.input_windows = {}
         self.output_windows = {}
+        self.parallel_mode = parallel_mode
+        if maximum_number_of_parallel_solves is None:
+            maximum_number_of_parallel_solves = multiprocessing.cpu_count()
+        self.maximum_number_of_parallel_solves = maximum_number_of_parallel_solves
 
     def register_solve_function(self, block_index, solver_function):
         self.solver_functions[block_index] = solver_function
@@ -127,9 +132,7 @@ class AggregateSolverState:
         for (idx, key), item in params.items():
             if block_idx == idx:
                 param_set[key] = item
-        return param_set  # np.array(params)[
-        #     self.input_windows[block_idx][0] : self.input_windows[block_idx][1]
-        # ]
+        return param_set
 
     def update_solution(self, block_idx, output, jacobian):
         self.output_matrix[
@@ -141,20 +144,42 @@ class AggregateSolverState:
         ] = jacobian
 
     def solve_reaktoro_block(self, params):
-        results = []
+        if self.parallel_mode:
+            return self.parallel_solver(params)
+        else:
+            return self.serial_solver(params)
+
+    def parallel_solver(self, params):
+        active_workers = []
         for blk in self.registered_blocks:
             param_set = self.get_params(blk, params)
-            result = self.solver_functions[blk](param_set)
-            results.append(result)
-
-        for i, blk in enumerate(self.registered_blocks):
-            if results[i] is None:
-                jacobian, output = self.get_solution_function[blk]()
-            else:
-                jacobian, output = results[i]
-
+            self.solver_functions[blk](param_set)
+            active_workers.append(blk)
+            # if we have more than max workers,
+            # collect any results that are ready first
+            while len(active_workers) >= self.maximum_number_of_parallel_solves:
+                for blk in active_workers:
+                    result = self.get_solution_function[active_workers[0]]()
+                    if result is not None:
+                        jacobian, output = result
+                        self.update_solution(blk, output, jacobian)
+                        active_workers.pop(0)  # remove first worker
+                        break
+        # collect any results that are still not collected
+        for blk in active_workers:
+            jacobian, output = self.get_solution_function[blk]()
             self.update_solution(blk, output, jacobian)
 
+        return (
+            self.jacobian_matrix,
+            self.output_matrix,
+        )
+
+    def serial_solver(self, params):
+        for blk in self.registered_blocks:
+            param_set = self.get_params(blk, params)
+            jacobian, output = self.solver_functions[blk](param_set)
+            self.update_solution(blk, output, jacobian)
         return (
             self.jacobian_matrix,
             self.output_matrix,
@@ -197,13 +222,38 @@ class ReaktoroBlockManagerData(ProcessBlockData):
             doc="""If true, will parallelize all rekatoro solver calls using multiprocessing""",
         ),
     )
+    CONFIG.declare(
+        "worker_timeout",
+        ConfigValue(
+            default=20,
+            domain=int,
+            description="Defines time in seconds for worker time out",
+            doc="""This is time out for parallel workers to time out and shut down if they receive no 
+            commands from main process (e.g. flowsheet)""",
+        ),
+    )
+    CONFIG.declare(
+        "maximum_number_of_parallel_solves",
+        ConfigValue(
+            default=None,
+            domain=int,
+            description="Maximum number of parallel solves",
+            doc="""This will limit how many parallel solves would be run, this will not reduce number of 
+            spawned processes""",
+        ),
+    )
 
     def build(self):
         super().build()
         self.registered_blocks = []
-        self.aggregate_solver_state = AggregateSolverState()
+        self.aggregate_solver_state = AggregateSolverState(
+            parallel_mode=self.config.use_parallel_mode,
+            maximum_number_of_parallel_solves=self.config.maximum_number_of_parallel_solves,
+        )
         if self.config.use_parallel_mode:
-            self.parallel_manager = ReaktoroParallelManager()
+            self.parallel_manager = ReaktoroParallelManager(
+                self.config.worker_timeout,
+            )
 
     def register_block(self, state, inputs, outputs, jacobian, solver, builder):
         blk = ReaktoroBlockData()

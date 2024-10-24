@@ -235,7 +235,9 @@ class ReaktoroSolver:
                 _log.warning(f"{key}: {value}")
             self._sequential_fails += 1
             if self._sequential_fails > self._max_fails:
-                assert False
+                raise RuntimeError(
+                    "Number of failed solves exceed maximum allowed number"
+                )
             raise cyipopt.CyIpoptEvaluationError
         else:
             self._sequential_fails = 0
