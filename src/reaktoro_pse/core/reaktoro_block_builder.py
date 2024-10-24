@@ -170,6 +170,7 @@ class ReaktoroBlockBuilder:
 
     def build_output_vars(self):
         new_output_vars = {}
+
         for key, obj in self.solver.output_specs.user_outputs.items():
             # NOTE: We do not set rkt_outputs to reaktoro_model outputs as they
             # same as user inputs - we want RKt model to update "user provided vars"
@@ -180,6 +181,7 @@ class ReaktoroBlockBuilder:
             self.block.outputs = Var(new_output_vars.keys(), initialize=1)
             for key, obj in new_output_vars.items():
                 obj.set_pyomo_var(self.block.outputs[key])
+        self.new_output_vars = new_output_vars
 
     def build_output_constraints(self):
         """first update rktOuptutObjects for pyomoBuildProperties with reaktoro pyomo variables as
@@ -188,15 +190,15 @@ class ReaktoroBlockBuilder:
         add them to new_output_var dict, which will be used to create new output variables on the block
         """
         for key, obj in self.solver.output_specs.user_outputs.items():
-
             if PropTypes.pyomo_built_prop == obj.property_type:
                 for (
                     pyoPropKey,
                     pyoPropObj,
                 ) in obj.pyomo_build_options.properties.items():
-                    pyoPropObj.set_pyomo_var(
-                        self.block.reaktoro_model.outputs[pyoPropKey]
-                    )
+                    if pyoPropObj.get_pyomo_var() is None:
+                        pyoPropObj.set_pyomo_var(
+                            self.block.reaktoro_model.outputs[pyoPropKey]
+                        )
 
         @self.block.Constraint(self.solver.output_specs.user_outputs)
         def output_constraints(fs, prop, prop_index):
@@ -206,6 +208,10 @@ class ReaktoroBlockBuilder:
                     prop_object
                 )
             else:
+                print(
+                    prop_object.get_pyomo_var(),
+                    self.block.reaktoro_model.outputs[(prop, prop_index)],
+                )
                 return (
                     prop_object.get_pyomo_var()
                     == self.block.reaktoro_model.outputs[(prop, prop_index)]
@@ -220,7 +226,7 @@ class ReaktoroBlockBuilder:
         else:
             self.reaktoro_initialize_function(presolve=presolve_during_initialization)
         self.initialize_output_variables_and_constraints()
-        _log.info(f"Initialized rkt block. {self.reaktoro_initialize_function}")
+        _log.info(f"Initialized rkt block")
 
     def get_sf(self, pyo_var):
 

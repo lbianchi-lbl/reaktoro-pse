@@ -44,11 +44,6 @@ def test_blockBuild_with_speciation_block(build_rkt_state_with_species):
         },
         database="PhreeqcDatabase",
         database_file="pitzer.dat",
-        jacobian_options={
-            "numerical_type": "average",
-            "numerical_order": 2,
-            "numerical_step": 1e-8,
-        },
         chemistry_modifier=m.CaO,
         outputs=m.outputs,
         build_speciation_block=True,
@@ -118,3 +113,48 @@ def test_blockBuild_with_speciation_block(build_rkt_state_with_species):
     for key in scaling_result["property_block"]:
         assert scaling_result["property_block"][key] == 1
     m.reaktoro_manager.terminate_workers()
+
+
+def test_blockBuild_with_wateqf_data_base(build_rkt_state_with_species):
+    m = build_rkt_state_with_species
+    m.CaO = Var(["CaO"], initialize=0.001, units=pyunits.mol / pyunits.s)
+    m.CaO.fix()
+    m.reaktoro_manager = ReaktoroBlockManager()
+    m.property_block = ReaktoroBlock(
+        aqueous_phase={
+            "composition": m.composition,
+            "convert_to_rkt_species": True,
+            "activity_model": "ActivityModelPhreeqc",
+        },
+        system_state={
+            "temperature": m.temp,
+            "pressure": m.pressure,
+            "pH": m.pH,
+        },
+        database="PhreeqcDatabase",
+        database_file="wateq4f.dat",
+        chemistry_modifier=m.CaO,
+        outputs=m.outputs,
+        build_speciation_block=True,
+        reaktoro_block_manager=m.reaktoro_manager,
+        exclude_species_list=[
+            "CH4",
+            "O2",
+            "S2-2",
+            "S4-2",
+            "S3-2",
+            "S5-2",
+            "S6-2",
+        ],
+    )
+    m.reaktoro_manager.build_reaktoro_blocks()
+    m.property_block.initialize()
+    cy_solver = get_solver(solver="cyipopt-watertap")
+    cy_solver.options["max_iter"] = 20
+    m.pH.unfix()
+    m.outputs[("scalingTendency", "Calcite")].fix(5)
+    result = cy_solver.solve(m, tee=True)
+    assert_optimal_termination(result)
+    m.display()
+    assert pytest.approx(m.outputs[("pH", None)].value, 1e-2) == 7.49301431889365
+    assert pytest.approx(m.pH.value, 1e-2) == 6.515501990042

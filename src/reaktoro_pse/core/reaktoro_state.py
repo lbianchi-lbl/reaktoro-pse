@@ -124,7 +124,7 @@ class PhaseManager:
             activity_model, state_of_matter
         )
 
-    def get_registered_phases(self, activate_database):
+    def get_registered_phases(self, active_database):
         """
         creates listof phases with applied activity models for generation of reaktoro state
         args:
@@ -139,7 +139,7 @@ class PhaseManager:
                 or phase_object.non_speciate_phase_list is not None
             ):
                 rkt_phase_object = self.create_rkt_phase(
-                    activate_database,
+                    active_database,
                     phase_object.phase_function,
                     phase_object.phase_list,
                     phase_object.non_speciate_phase_list,
@@ -149,6 +149,7 @@ class PhaseManager:
                     for rpo in rkt_phase_object:
                         self.apply_activity_model(
                             rpo,
+                            active_database,
                             phase_object.activity_model,
                             phase_object.state_of_matter,
                         )
@@ -156,6 +157,7 @@ class PhaseManager:
                 else:
                     self.apply_activity_model(
                         rkt_phase_object,
+                        active_database,
                         phase_object.activity_model,
                         phase_object.state_of_matter,
                     )
@@ -163,13 +165,13 @@ class PhaseManager:
         return activate_phase_list
 
     def apply_activity_model(
-        self, rkt_phase_object, activity_model, state_of_matter=None
+        self, rkt_phase_object, active_database, activity_model, state_of_matter=None
     ):
         """sets activity mode"""
         if activity_model is None:
             raise TypeError(f"Activity model for {rkt_phase_object} is not set.")
         rkt_activity_model_object = self._process_activity(
-            activity_model, activity_model, state_of_matter
+            active_database, activity_model, state_of_matter
         )
         rkt_phase_object.set(rkt_activity_model_object)
 
@@ -235,10 +237,11 @@ class PhaseManager:
                 if state_of_matter is None:
                     try:
                         return getattr(rkt, activity_model)()
-                    except RuntimeError:
+                    except TypeError:
+                        print(active_database)
+                        print(getattr(rkt, activity_model))
                         # might require database as input (e.g ActivityModelPhreeqc)
                         return getattr(rkt, activity_model)(active_database)
-
                 else:
                     return getattr(rkt, activity_model)(state_of_matter)
             elif isinstance(activity_model, tuple):
