@@ -46,6 +46,9 @@ class ReaktoroBlockData:
         configs.append(self.solver.export_config())
         return configs
 
+    def freeze_state(self):
+        self.frozen_state = self.get_configs()
+
 
 class AggregateSolverState:
     def __init__(self):
@@ -210,6 +213,7 @@ class ReaktoroBlockManagerData(ProcessBlockData):
         blk.jacobian = jacobian
         blk.solver = solver
         blk.builder = builder
+        blk.freeze_state()
 
         self.registered_blocks.append(blk)
         return blk
@@ -234,10 +238,8 @@ class ReaktoroBlockManagerData(ProcessBlockData):
                 self.aggregate_solver_state.register_solve_function(
                     block_idx, block.solver.solve_reaktoro_block
                 )
-        # assert False
         if self.config.use_parallel_mode:
             self.parallel_manager.start_workers()
-        # assert False
 
     def build_reaktoro_blocks(self):
         self.aggregate_inputs_and_outputs()

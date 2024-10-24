@@ -10,6 +10,7 @@
 # "https://github.com/watertap-org/reaktoro-pse/"
 #################################################################################
 
+import array
 from calendar import c
 import multiprocessing as mp
 from multiprocessing import shared_memory
@@ -72,7 +73,7 @@ class RemoteWorker:
         self.jacobian_reference = shared_memory.SharedMemory(name=jacobian_reference)
         self.input_matrix = np.ndarray(
             (3, len(self.inputs.rkt_inputs.keys())),
-            dtype=float,
+            dtype=np.float64,
             buffer=self.input_reference.buf,
         )
         self.jacobian_matrix = np.ndarray(
@@ -80,13 +81,13 @@ class RemoteWorker:
                 len(self.outputs.rkt_outputs.keys()),
                 len(self.inputs.rkt_inputs.keys()),
             ),
-            dtype=float,
+            dtype=np.float64,
             buffer=self.jacobian_reference.buf,
         )
 
         self.output_matrix = np.ndarray(
             len(self.outputs.rkt_outputs.keys()),
-            dtype=float,
+            dtype=np.float64,
             buffer=self.output_reference.buf,
         )
         self.params = {}
@@ -147,14 +148,14 @@ class LocalWorker:
         # index 3 for ipopt solver calls
         self.input_keys = self.worker_data.inputs.rkt_inputs.keys()
         input_matrix = np.zeros(
-            (3, len(self.worker_data.inputs.rkt_inputs.keys())), dtype=float
+            (3, len(self.worker_data.inputs.rkt_inputs.keys())), dtype=np.float64
         )
         self.input_reference = shared_memory.SharedMemory(
             create=True, size=input_matrix.nbytes
         )
         self.input_matrix = np.ndarray(
             (3, len(self.worker_data.inputs.rkt_inputs.keys())),
-            dtype=float,
+            dtype=np.float64,
             buffer=self.input_reference.buf,
         )
         # for storing output matrix and jacobian
@@ -163,7 +164,7 @@ class LocalWorker:
                 len(self.worker_data.outputs.rkt_outputs.keys()),
                 len(self.input_keys),
             ),
-            dtype=float,
+            dtype=np.float64,
         )
         output_matrix = np.zeros(len(self.worker_data.outputs.rkt_outputs.keys()))
         self.jacobian_reference = shared_memory.SharedMemory(
@@ -174,7 +175,7 @@ class LocalWorker:
                 len(self.worker_data.outputs.rkt_outputs.keys()),
                 len(self.input_keys),
             ),
-            dtype=float,
+            dtype=np.float64,
             buffer=self.jacobian_reference.buf,
         )
         self.output_reference = shared_memory.SharedMemory(
@@ -182,18 +183,18 @@ class LocalWorker:
         )
         self.output_matrix = np.ndarray(
             len(self.worker_data.outputs.rkt_outputs.keys()),
-            dtype=float,
+            dtype=np.float64,
             buffer=self.output_reference.buf,
         )
 
     def initialize(self, presolve):
-
         for i, key in enumerate(self.input_keys):
-            self.input_matrix[0][i] = self.worker_data.inputs.rkt_inputs[
-                key
-            ].get_value()
-            self.input_matrix[1][i] = self.worker_data.inputs.rkt_inputs[key].get_value(
-                apply_conversion=True
+
+            self.input_matrix[0][i] = np.float64(
+                self.worker_data.inputs.rkt_inputs[key].get_value()
+            )
+            self.input_matrix[1][i] = np.float64(
+                self.worker_data.inputs.rkt_inputs[key].get_value(apply_conversion=True)
             )
         self.local_pipe.send((WorkerMessages.initialize, presolve))
 
@@ -216,7 +217,7 @@ class LocalWorker:
 
     def update_params(self, params):
         for i, key in enumerate(self.input_keys):
-            self.input_matrix[2][i] = params[key]
+            self.input_matrix[2][i] = np.float64(params[key])
 
     def get_solution(self):
         if self.local_pipe.poll:
@@ -251,12 +252,11 @@ class ReaktoroParallelManager:
 
     def start_workers(self):
         for idx, local_worker in self.registered_workers.items():
-            worker_config = local_worker.worker_data.get_configs()
             process = mp.Process(
                 target=ReaktoroActor,
                 args=(
                     local_worker.remote_pipe,
-                    worker_config,
+                    local_worker.worker_data.frozen_state,
                     local_worker.input_reference.name,
                     local_worker.output_reference.name,
                     local_worker.jacobian_reference.name,

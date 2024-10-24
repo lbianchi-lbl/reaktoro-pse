@@ -238,8 +238,6 @@ class PhaseManager:
                     try:
                         return getattr(rkt, activity_model)()
                     except TypeError:
-                        print(active_database)
-                        print(getattr(rkt, activity_model))
                         # might require database as input (e.g ActivityModelPhreeqc)
                         return getattr(rkt, activity_model)(active_database)
                 else:
@@ -279,10 +277,26 @@ class ReaktoroStateExport:
         self.database_file = None
 
     def copy_rkt_inputs(self, inputs):
-        self.inputs = copy.deepcopy(inputs)
-        for key, obj in self.inputs.items():
-            # self.inputs[key] = copy.deepcopy(obj)
-            self.inputs[key].delete_pyomo_var()
+        self.inputs = RktInputs.RktInputs()
+        for key, obj in inputs.items():
+            obj.update_values(True)
+            self.inputs[key] = None
+            self.inputs[key].time_unit = obj.time_unit
+            self.inputs[key].main_unit = obj.main_unit
+            self.inputs[key].conversion_unit = obj.conversion_unit
+            self.inputs[key].conversion_value = obj.conversion_value
+            self.inputs[key].required_unit = obj.required_unit
+            self.inputs[key].lower_bound = obj.lower_bound
+            self.inputs[key].input_type = obj.input_type
+            self.inputs[key].value = obj.value
+            self.inputs[key].converted_value = obj.converted_value
+            self.inputs.registered_phases = inputs.registered_phases
+        self.inputs.all_species = inputs.all_species
+        self.inputs.species_list = inputs.species_list
+        self.inputs.convert_to_rkt_species = inputs.convert_to_rkt_species
+        self.inputs.composition_is_elements = inputs.composition_is_elements
+        self.inputs.conversion_method = inputs.conversion_method
+        self.inputs.rkt_input_list = inputs.rkt_input_list
 
 
 # base class for configuring reaktoro states and solver
@@ -795,3 +809,4 @@ class ReaktoroState:
         self.phase_manager = export_object.phase_manager
         self.database_file = export_object.database_file
         self.database_type = export_object.database_type
+        self.exclude_species_list = export_object.exclude_species_list

@@ -414,9 +414,9 @@ class ReaktoroBlockData(ProcessBlockData):
             # these value swill be overwritten during intilization anyway
             for ion, obj in self.speciation_block.outputs.items():
                 if self.config.aqueous_phase.fixed_solvent_specie in ion:
-                    obj.value = obj.value * 10
+                    obj.set_value(obj.value * 10)
                 else:
-                    obj.value = obj.value * 0.001
+                    obj.set_value(obj.value / 1000)
             if aqueous_input_composition is not {}:
                 aqueous_input_composition = self.speciation_block.outputs
 

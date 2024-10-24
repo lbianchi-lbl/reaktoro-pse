@@ -208,10 +208,6 @@ class ReaktoroBlockBuilder:
                     prop_object
                 )
             else:
-                print(
-                    prop_object.get_pyomo_var(),
-                    self.block.reaktoro_model.outputs[(prop, prop_index)],
-                )
                 return (
                     prop_object.get_pyomo_var()
                     == self.block.reaktoro_model.outputs[(prop, prop_index)]

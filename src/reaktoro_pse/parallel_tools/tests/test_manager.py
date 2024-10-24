@@ -158,3 +158,4 @@ def test_blockBuild_with_wateqf_data_base(build_rkt_state_with_species):
     m.display()
     assert pytest.approx(m.outputs[("pH", None)].value, 1e-2) == 7.49301431889365
     assert pytest.approx(m.pH.value, 1e-2) == 6.515501990042
+    m.reaktoro_manager.terminate_workers()
