@@ -141,6 +141,9 @@ def test_build_with_rkt_dissolution(build_with_dissolve_in_rkt):
     m.rkt_block = Block()
     builder = ReaktoroBlockBuilder(m.rkt_block, rkt_solver)
     builder.initialize()
+    m.display()
+    m.rkt_block.reaktoro_model.display()
+    m.rkt_block.output_constraints.pprint()
     # will have as many DOFs as outputs due to pyomo not
     # knowing tha graybox exists.
     assert len(m.rkt_block.reaktoro_model.inputs) == len(
