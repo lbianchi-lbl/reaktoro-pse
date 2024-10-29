@@ -759,9 +759,9 @@ class ReaktoroBlockData(ProcessBlockData):
         """Displays reaktoro state"""
         if self.config.build_speciation_block:
             _log.info("-----Displaying information for speciation block ------")
-            _log.info(self.speciation_block.rkt_state.state)
+            self.speciation_block.rkt_block_builder.display_state()
         _log.info("-----Displaying information for property block ------")
-        _log.info(self.rkt_state.state)
+        self.rkt_block_builder.display_state()
 
     def update_jacobian_scaling(
         self, user_scaling_dict=None, set_on_speciation_block=True

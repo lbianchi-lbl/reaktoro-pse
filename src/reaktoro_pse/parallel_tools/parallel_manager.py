@@ -122,6 +122,9 @@ class RemoteWorker:
         for i, key in enumerate(self.inputs.rkt_inputs.keys()):
             self.params[key] = self.input_matrix[2][i]
 
+    def display_state(self):
+        print(self.state.state)
+
     def check_solve(self):
         if self.old_matrix is None:
             self.old_matrix = self.input_matrix[2].copy()
@@ -160,6 +163,7 @@ class WorkerMessages:
     CyIpoptEvaluationError = "CyIpoptEvaluationError"
     terminate = "terminate"
     failed = "failed"
+    display_state = "display_state"
 
 
 class LocalWorker:
@@ -260,6 +264,9 @@ class LocalWorker:
                     "The worker failed and did not return a solution terminated"
                 )
 
+    def display_state(self):
+        self.local_pipe.send(WorkerMessages.display_state)
+
     def terminate(self):
         self.local_pipe.send(WorkerMessages.terminate)
         _log.info("Worker terminated")
@@ -282,6 +289,9 @@ class ReaktoroParallelManager:
 
     def get_initialize_function(self, block_idx):
         return self.registered_workers[block_idx].initialize
+
+    def get_display_function(self, block_idx):
+        return self.registered_workers[block_idx].display_state
 
     def start_workers(self):
         for idx, local_worker in self.registered_workers.items():
@@ -330,6 +340,9 @@ def ReaktoroActor(
                 result = WorkerMessages.success
             if command == WorkerMessages.solve:
                 result = reaktoro_worker.solve()
+            if command == WorkerMessages.display_state:
+                result = reaktoro_worker.display_state()
+                result = WorkerMessages.success
             if command == WorkerMessages.terminate:
                 reaktoro_worker.close_shared_memory()
                 return

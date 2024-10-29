@@ -42,6 +42,11 @@ def test_blockBuild_with_speciation_block(build_rkt_state_with_species):
             "pressure": m.pressure,
             "pH": m.pH,
         },
+        jacobian_options={
+            "numerical_type": "average",
+            "numerical_order": 2,
+            "numerical_step": 1e-8,
+        },
         database="PhreeqcDatabase",
         database_file="pitzer.dat",
         chemistry_modifier=m.CaO,
@@ -51,6 +56,7 @@ def test_blockBuild_with_speciation_block(build_rkt_state_with_species):
     )
     m.reaktoro_manager.build_reaktoro_blocks()
     m.property_block.initialize()
+
     cy_solver = get_solver(solver="cyipopt-watertap")
     cy_solver.options["max_iter"] = 20
     m.pH.unfix()
@@ -115,6 +121,7 @@ def test_blockBuild_with_speciation_block(build_rkt_state_with_species):
     assert "property_block" in scaling_result
     for key in scaling_result["property_block"]:
         assert scaling_result["property_block"][key] == 1
+    m.property_block.display_reaktoro_state()
     m.reaktoro_manager.terminate_workers()
 
 

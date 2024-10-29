@@ -55,12 +55,18 @@ class ReaktoroBlockBuilder:
             raise TypeError("Reaktoro block builder requires a ReaktoroSolver class")
         self.configure_jacobian_scaling()
         self.reaktoro_initialize_function = None  # used to provide external solve call
+        self.display_reaktoro_state_function = (
+            None  # used to specifying external function to display rkt state
+        )
         self.build_output_vars()
         if build_on_init:  # option to support legacy implementation
             self.build_reaktoro_block()
 
     def build_reaktoro_block(
-        self, gray_box_model=None, reaktoro_initialize_function=None
+        self,
+        gray_box_model=None,
+        reaktoro_initialize_function=None,
+        display_reaktoro_state_function=None,
     ):
         """build reaktoro model"""
         if gray_box_model is None:
@@ -73,6 +79,8 @@ class ReaktoroBlockBuilder:
             self.block.reaktoro_model = gray_box_model
         if reaktoro_initialize_function is not None:
             self.reaktoro_initialize_function = reaktoro_initialize_function
+        if display_reaktoro_state_function is not None:
+            self.display_reaktoro_state_function = display_reaktoro_state_function
         self.build_input_constraints()
         self.build_output_constraints()
 
@@ -350,3 +358,9 @@ class ReaktoroBlockBuilder:
                 sf = self.get_sf(self.block.reaktoro_model.inputs[key])
             iscale.set_scaling_factor(self.block.reaktoro_model.inputs[key], sf)
             iscale.constraint_scaling_transform(self.block.input_constraints[key], sf)
+
+    def display_state(self):
+        if self.display_reaktoro_state_function is None:
+            print(self.solver.state)
+        else:
+            self.display_reaktoro_state_function()

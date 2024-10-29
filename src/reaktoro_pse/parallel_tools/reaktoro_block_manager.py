@@ -316,11 +316,14 @@ class ReaktoroBlockManagerData(ProcessBlockData):
             )
             if self.config.use_parallel_mode:
                 init_func = self.parallel_manager.get_initialize_function(block_idx)
+                disp_func = self.parallel_manager.get_display_function(block_idx)
             else:
                 init_func = self.aggregate_solver_state.solver_functions[block_idx]
+                disp_func = None
             block.builder.build_reaktoro_block(
                 gray_box_model=pseudo_gray_box_model,
                 reaktoro_initialize_function=init_func,
+                display_reaktoro_state_function=disp_func,
             )
             block.pseudo_gray_box = pseudo_gray_box_model
 
