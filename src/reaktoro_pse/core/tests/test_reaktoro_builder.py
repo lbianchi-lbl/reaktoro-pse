@@ -140,10 +140,6 @@ def test_build_with_rkt_dissolution(build_with_dissolve_in_rkt):
     m, rkt_solver = build_with_dissolve_in_rkt
     m.rkt_block = Block()
     builder = ReaktoroBlockBuilder(m.rkt_block, rkt_solver)
-
-    # m.display()
-    # m.rkt_block.reaktoro_model.display()
-
     builder.initialize()
     m.display()
     m.rkt_block.reaktoro_model.display()
@@ -171,79 +167,79 @@ def test_build_with_rkt_dissolution(build_with_dissolve_in_rkt):
     )
 
 
-# def test_build_with_pyomo_dissolution(build_with_dissolve_in_pyomo):
-#     m, rkt_solver = build_with_dissolve_in_pyomo
-#     m.rkt_block = Block()
-#     builder = ReaktoroBlockBuilder(m.rkt_block, rkt_solver)
-#     builder.initialize()
-#     # will have as many DOFs as outputs due to pyomo not
-#     # knowing tha graybox exists.
-#     print(rkt_solver.output_specs.rkt_outputs)
-#     assert degrees_of_freedom(m) == len(rkt_solver.output_specs.rkt_outputs)
-#     cy_solver = get_solver(solver="cyipopt-watertap")
-#     cy_solver.options["max_iter"] = 20
-#     m.pH.unfix()
-#     m.display()
-#     m.rkt_block.outputs[("scalingTendency", "Calcite")].fix(5)
-#     result = cy_solver.solve(m, tee=True)
-#     assert_optimal_termination(result)
-#     assert pytest.approx(m.pH.value, 1e-3) == 6.5257440
-#     assert (
-#         pytest.approx(m.rkt_block.outputs[("scalingTendency", "Calcite")].value, 1e-3)
-#         == m.rkt_block.outputs[("scalingTendencyDirect", "Calcite")].value
-#     )
+def test_build_with_pyomo_dissolution(build_with_dissolve_in_pyomo):
+    m, rkt_solver = build_with_dissolve_in_pyomo
+    m.rkt_block = Block()
+    builder = ReaktoroBlockBuilder(m.rkt_block, rkt_solver)
+    builder.initialize()
+    # will have as many DOFs as outputs due to pyomo not
+    # knowing tha graybox exists.
+    print(rkt_solver.output_specs.rkt_outputs)
+    assert degrees_of_freedom(m) == len(rkt_solver.output_specs.rkt_outputs)
+    cy_solver = get_solver(solver="cyipopt-watertap")
+    cy_solver.options["max_iter"] = 20
+    m.pH.unfix()
+    m.display()
+    m.rkt_block.outputs[("scalingTendency", "Calcite")].fix(5)
+    result = cy_solver.solve(m, tee=True)
+    assert_optimal_termination(result)
+    assert pytest.approx(m.pH.value, 1e-3) == 6.5257440
+    assert (
+        pytest.approx(m.rkt_block.outputs[("scalingTendency", "Calcite")].value, 1e-3)
+        == m.rkt_block.outputs[("scalingTendencyDirect", "Calcite")].value
+    )
 
 
-# def test_build_with_rkt_dissolution_mass_basis(build_with_dissolve_in_rkt_mass_basis):
-#     m, rkt_solver = build_with_dissolve_in_rkt_mass_basis
-#     m.rkt_block = Block()
-#     builder = ReaktoroBlockBuilder(m.rkt_block, rkt_solver)
-#     builder.initialize()
-#     # will have as many DOFs as outputs due to pyomo not
-#     # knowing tha graybox exists.
-#     assert len(m.rkt_block.reaktoro_model.inputs) == len(
-#         rkt_solver.input_specs.rkt_inputs
-#     )
-#     assert len(m.rkt_block.outputs) == len(rkt_solver.output_specs.user_outputs)
-#     assert len(m.rkt_block.reaktoro_model.outputs) == len(
-#         rkt_solver.output_specs.rkt_outputs
-#     )
-#     assert degrees_of_freedom(m) == len(rkt_solver.output_specs.rkt_outputs)
-#     cy_solver = get_solver(solver="cyipopt-watertap")
-#     cy_solver.options["max_iter"] = 20
-#     m.pH.unfix()
-#     m.rkt_block.outputs[("scalingTendency", "Calcite")].fix(5)
+def test_build_with_rkt_dissolution_mass_basis(build_with_dissolve_in_rkt_mass_basis):
+    m, rkt_solver = build_with_dissolve_in_rkt_mass_basis
+    m.rkt_block = Block()
+    builder = ReaktoroBlockBuilder(m.rkt_block, rkt_solver)
+    builder.initialize()
+    # will have as many DOFs as outputs due to pyomo not
+    # knowing tha graybox exists.
+    assert len(m.rkt_block.reaktoro_model.inputs) == len(
+        rkt_solver.input_specs.rkt_inputs
+    )
+    assert len(m.rkt_block.outputs) == len(rkt_solver.output_specs.user_outputs)
+    assert len(m.rkt_block.reaktoro_model.outputs) == len(
+        rkt_solver.output_specs.rkt_outputs
+    )
+    assert degrees_of_freedom(m) == len(rkt_solver.output_specs.rkt_outputs)
+    cy_solver = get_solver(solver="cyipopt-watertap")
+    cy_solver.options["max_iter"] = 20
+    m.pH.unfix()
+    m.rkt_block.outputs[("scalingTendency", "Calcite")].fix(5)
 
-#     # m.display()
-#     result = cy_solver.solve(m, tee=True)
-#     assert_optimal_termination(result)
-#     assert pytest.approx(m.pH.value, 1e-3) == 6.5257440
-#     assert (
-#         pytest.approx(m.rkt_block.outputs[("scalingTendency", "Calcite")].value, 1e-3)
-#         == m.rkt_block.outputs[("scalingTendencyDirect", "Calcite")].value
-#     )
+    # m.display()
+    result = cy_solver.solve(m, tee=True)
+    assert_optimal_termination(result)
+    assert pytest.approx(m.pH.value, 1e-3) == 6.5257440
+    assert (
+        pytest.approx(m.rkt_block.outputs[("scalingTendency", "Calcite")].value, 1e-3)
+        == m.rkt_block.outputs[("scalingTendencyDirect", "Calcite")].value
+    )
 
 
-# def test_build_with_pyomo_dissolution_mass_basis(
-#     build_with_dissolve_in_pyomo_mass_basis,
-# ):
-#     m, rkt_solver = build_with_dissolve_in_pyomo_mass_basis
-#     m.rkt_block = Block()
-#     builder = ReaktoroBlockBuilder(m.rkt_block, rkt_solver)
-#     builder.initialize()
-#     # will have as many DOFs as outputs due to pyomo not
-#     # knowing tha graybox exists.
-#     assert degrees_of_freedom(m) == len(rkt_solver.output_specs.rkt_outputs)
-#     cy_solver = get_solver(solver="cyipopt-watertap")
-#     cy_solver.options["max_iter"] = 20
-#     m.pH.unfix()
-#     m.display()
-#     m.rkt_block.outputs[("scalingTendency", "Calcite")].fix(5)
+def test_build_with_pyomo_dissolution_mass_basis(
+    build_with_dissolve_in_pyomo_mass_basis,
+):
+    m, rkt_solver = build_with_dissolve_in_pyomo_mass_basis
+    m.rkt_block = Block()
+    builder = ReaktoroBlockBuilder(m.rkt_block, rkt_solver)
+    builder.initialize()
+    # will have as many DOFs as outputs due to pyomo not
+    # knowing tha graybox exists.
+    assert degrees_of_freedom(m) == len(rkt_solver.output_specs.rkt_outputs)
+    cy_solver = get_solver(solver="cyipopt-watertap")
+    cy_solver.options["max_iter"] = 20
+    m.pH.unfix()
+    m.display()
+    m.rkt_block.outputs[("scalingTendency", "Calcite")].fix(5)
 
-#     result = cy_solver.solve(m, tee=True)
-#     assert_optimal_termination(result)
-#     assert pytest.approx(m.pH.value, 1e-3) == 6.5257440
-#     assert (
-#         pytest.approx(m.rkt_block.outputs[("scalingTendency", "Calcite")].value, 1e-3)
-#         == m.rkt_block.outputs[("scalingTendencyDirect", "Calcite")].value
-#     )
+    result = cy_solver.solve(m, tee=True)
+    assert_optimal_termination(result)
+    assert pytest.approx(m.pH.value, 1e-3) == 6.5257440
+    assert (
+        pytest.approx(m.rkt_block.outputs[("scalingTendency", "Calcite")].value, 1e-3)
+        == m.rkt_block.outputs[("scalingTendencyDirect", "Calcite")].value
+    )
