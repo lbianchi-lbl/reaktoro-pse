@@ -31,6 +31,7 @@ from reaktoro_pse.core.reaktoro_jacobian import ReaktoroJacobianSpec
 from reaktoro_pse.core.reaktoro_solver import ReaktoroSolver
 from reaktoro_pse.core.reaktoro_block_builder import ReaktoroBlockBuilder
 
+from reaktoro_pse.parallel_tools.reaktoro_block_manager import ReaktoroBlockManager
 
 from reaktoro_pse.reaktoro_block_config.jacobian_options import JacobianOptions
 from reaktoro_pse.reaktoro_block_config.reaktoro_solver_options import (
@@ -245,6 +246,19 @@ class ReaktoroBlockData(ProcessBlockData):
             """,
         ),
     )
+    CONFIG.declare(
+        "reaktoro_block_manager",
+        ConfigValue(
+            default=None,
+            domain=IsInstance(ReaktoroBlockManager),
+            description="Reaktoro block manager for parallelizing reaktoro solves",
+            doc="""
+            Option to provide a reaktoro block manager which would manage all blocks built on a model and
+            allow their parallel execution. When using ReaktorBlockManager, make sure to run
+            ReaktoroBlockManager.build_reaktoro_blocks() after constructing all of ReaktoroBlocks and 
+            before doing any initialization calls, or interacting with ReaktoroBlocks themself .""",
+        ),
+    )
     CONFIG.declare("jacobian_options", JacobianOptions().get_dict())
 
     CONFIG.declare(
@@ -400,9 +414,9 @@ class ReaktoroBlockData(ProcessBlockData):
             # these value swill be overwritten during intilization anyway
             for ion, obj in self.speciation_block.outputs.items():
                 if self.config.aqueous_phase.fixed_solvent_specie in ion:
-                    obj.value = obj.value * 10
+                    obj.set_value(obj.value * 10)
                 else:
-                    obj.value = obj.value * 0.001
+                    obj.set_value(obj.value / 1000)
             if aqueous_input_composition is not {}:
                 aqueous_input_composition = self.speciation_block.outputs
 
@@ -703,7 +717,18 @@ class ReaktoroBlockData(ProcessBlockData):
         block.rkt_block_builder.configure_jacobian_scaling(
             jacobian_scaling_type=scaling_type, user_scaling=scaling
         )
-        block.rkt_block_builder.build_reaktoro_block()
+        if self.config.reaktoro_block_manager is not None:
+            managed_block = self.config.reaktoro_block_manager.register_block(
+                state=block.rkt_state,
+                inputs=block.rkt_inputs,
+                outputs=block.rkt_outputs,
+                jacobian=block.rkt_jacobian,
+                solver=block.rkt_solver,
+                builder=block.rkt_block_builder,
+            )
+            block.managed_block = managed_block
+        else:
+            block.rkt_block_builder.build_reaktoro_block()
 
     # TODO: Update to provide output location (e.g. StringIO)
     def display_jacobian_outputs(self):
@@ -734,9 +759,9 @@ class ReaktoroBlockData(ProcessBlockData):
         """Displays reaktoro state"""
         if self.config.build_speciation_block:
             _log.info("-----Displaying information for speciation block ------")
-            _log.info(self.speciation_block.rkt_state.state)
+            self.speciation_block.rkt_block_builder.display_state()
         _log.info("-----Displaying information for property block ------")
-        _log.info(self.rkt_state.state)
+        self.rkt_block_builder.display_state()
 
     def update_jacobian_scaling(
         self, user_scaling_dict=None, set_on_speciation_block=True

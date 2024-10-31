@@ -143,7 +143,6 @@ def test_build_with_rkt_dissolution(build_with_dissolve_in_rkt):
     builder.initialize()
     m.display()
     m.rkt_block.reaktoro_model.display()
-    m.rkt_block.output_constraints.pprint()
     # will have as many DOFs as outputs due to pyomo not
     # knowing tha graybox exists.
     assert len(m.rkt_block.reaktoro_model.inputs) == len(
@@ -175,6 +174,7 @@ def test_build_with_pyomo_dissolution(build_with_dissolve_in_pyomo):
     builder.initialize()
     # will have as many DOFs as outputs due to pyomo not
     # knowing tha graybox exists.
+    print(rkt_solver.output_specs.rkt_outputs)
     assert degrees_of_freedom(m) == len(rkt_solver.output_specs.rkt_outputs)
     cy_solver = get_solver(solver="cyipopt-watertap")
     cy_solver.options["max_iter"] = 20

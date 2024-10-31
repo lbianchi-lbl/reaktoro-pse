@@ -35,10 +35,30 @@ class ReaktoroInputExport:
         self.exact_speciation = None
 
     def copy_chem_inputs(self, chem_inputs):
-        self.rkt_chemical_inputs = copy.deepcopy(chem_inputs)
-        for key, obj in self.rkt_chemical_inputs.items():
-            # self.inputs[key] = copy.deepcopy(obj)
-            self.rkt_chemical_inputs[key].delete_pyomo_var()
+        self.rkt_chemical_inputs = RktInputs()
+        for key, obj in chem_inputs.items():
+            obj.update_values(True)
+            self.rkt_chemical_inputs[key] = None
+            self.rkt_chemical_inputs[key].time_unit = obj.time_unit
+            self.rkt_chemical_inputs[key].main_unit = obj.main_unit
+            self.rkt_chemical_inputs[key].conversion_unit = obj.conversion_unit
+            self.rkt_chemical_inputs[key].conversion_value = obj.conversion_value
+            self.rkt_chemical_inputs[key].required_unit = obj.required_unit
+            self.rkt_chemical_inputs[key].lower_bound = obj.lower_bound
+            self.rkt_chemical_inputs[key].input_type = obj.input_type
+            self.rkt_chemical_inputs[key].value = obj.value
+            self.rkt_chemical_inputs[key].converted_value = obj.converted_value
+        self.rkt_chemical_inputs.registered_phases = chem_inputs.registered_phases
+        self.rkt_chemical_inputs.all_species = chem_inputs.all_species
+        self.rkt_chemical_inputs.species_list = chem_inputs.species_list
+        self.rkt_chemical_inputs.convert_to_rkt_species = (
+            chem_inputs.convert_to_rkt_species
+        )
+        self.rkt_chemical_inputs.composition_is_elements = (
+            chem_inputs.composition_is_elements
+        )
+        self.rkt_chemical_inputs.conversion_method = chem_inputs.conversion_method
+        self.rkt_chemical_inputs.rkt_input_list = chem_inputs.rkt_input_list
 
 
 class ReaktoroInputSpec:
@@ -146,7 +166,6 @@ class ReaktoroInputSpec:
             self.assert_charge_neutrality,
             self.dissolve_species_in_rkt,
         )
-
         # get input name order!
         for idx, spec in enumerate(self.equilibrium_specs.namesInputs()):
             if spec == "T":

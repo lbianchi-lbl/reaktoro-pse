@@ -87,6 +87,7 @@ class ReaktoroSolver:
         self._sequential_fails = 0
         self._max_fails = 30
         self._input_params = {}
+        self.jacobian_scaling_values = None
 
     def export_config(self):
         export_object = ReaktoroSolverExport()
@@ -234,7 +235,9 @@ class ReaktoroSolver:
                 _log.warning(f"{key}: {value}")
             self._sequential_fails += 1
             if self._sequential_fails > self._max_fails:
-                assert False
+                raise RuntimeError(
+                    "Number of failed solves exceed maximum allowed number"
+                )
             raise cyipopt.CyIpoptEvaluationError
         else:
             self._sequential_fails = 0
@@ -259,3 +262,6 @@ class ReaktoroSolver:
         )
         self.output_specs.update_supported_props()
         return result
+
+    def get_jacobian_scaling(self):
+        return self.jacobian_scaling_values
